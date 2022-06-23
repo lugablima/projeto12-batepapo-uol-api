@@ -20,6 +20,8 @@ mongoClient.connect().then(() => {
   db = mongoClient.db("chatUOL");
 });
 
+/* Participants routes */
+
 app.post("/participants", async (req, res) => {
   const { name } = req.body;
   //Falta ainda fazer a validação com joi
@@ -51,6 +53,27 @@ app.get("/participants", async (req, res) => {
     const participants = await db.collection("participants").find().toArray();
 
     res.send(participants);
+  } catch (error) {
+    console.log(error);
+    res.sendStatus(500);
+  }
+});
+
+/* Messages routes */
+
+app.post("/messages", async (req, res) => {
+  try {
+    const { to, text, type } = req.body;
+    const user = req.header("User");
+
+    const userExist = await db.collection("participants").findOne({ name: user });
+    //Falta ainda fazer a validação com joi
+    if (!to || !text || !type || !userExist || type !== "message" || type !== "private_message")
+      return res.sendStatus(422);
+
+    await db.collection("messages").insertOne({ from: user, to, text, type, time: dayjs().format("HH:mm:ss") });
+
+    res.sendStatus(201);
   } catch (error) {
     console.log(error);
     res.sendStatus(500);
