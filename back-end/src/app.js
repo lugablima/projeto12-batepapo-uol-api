@@ -80,6 +80,34 @@ app.post("/messages", async (req, res) => {
   }
 });
 
+app.get("/messages", async (req, res) => {
+  const user = req.header("User");
+  const limit = parseInt(req.query.limit);
+
+  // const userExist = await db.collection("participants").findOne({ name: user });
+  // if(!userExist) return res.sendStatus(422);
+
+  try {
+    let messages = await db.collection("/messages").find().toArray();
+
+    messages = messages.filter((msg) => {
+      let boolean;
+      if (msg.type === "message" || msg.type === "status") boolean = true;
+      else if (msg.type === "private_message" && (msg.from === user || msg.to === user || msg.to === "Todos"))
+        boolean = true;
+      else boolean = false;
+      return boolean;
+    });
+
+    if (!limit) return res.send(messages);
+
+    res.send(messages.slice(limit * -1));
+  } catch (error) {
+    console.log(error);
+    res.sendStatus(500);
+  }
+});
+
 app.listen(5000, () => {
   console.log("O Servidor está rodando em http://localhost:5000");
 });
