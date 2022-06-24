@@ -1,10 +1,20 @@
 import express, { json } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+dotenv.config();
 import { MongoClient } from "mongodb";
 import dayjs from "dayjs";
+import joi from "joi";
 
-dotenv.config();
+const participantSchema = joi.object({
+  name: joi.string().trim().required(),
+});
+
+const messsageSchema = joi.object({
+  to: joi.string().trim().required(),
+  text: joi.string().trim().required(),
+  type: joi.string().trim().valid("message", "private_message").required(),
+});
 
 const app = express();
 
@@ -13,8 +23,8 @@ app.use([json(), cors()]);
 const mongoClient = new MongoClient(process.env.MONGO_URI);
 let db;
 
-const participant = { name: "João", lastStatus: 12313123 };
-const message = { from: "João", to: "Todos", text: "oi galera", type: "message", time: "20:04:37" };
+// const participant = { name: "João", lastStatus: 12313123 };
+// const message = { from: "João", to: "Todos", text: "oi galera", type: "message", time: "20:04:37" };
 
 mongoClient.connect().then(() => {
   db = mongoClient.db("chatUOL");
@@ -23,18 +33,20 @@ mongoClient.connect().then(() => {
 /* Participants routes */
 
 app.post("/participants", async (req, res) => {
-  const { name } = req.body;
-  //Falta ainda fazer a validação com joi
-  if (!name) return res.sendStatus(422);
+  const body = req.body;
+
+  const validation = participantSchema.validate(body);
+
+  if (validation.error) return res.sendStatus(422);
 
   try {
-    const participant = await db.collection("participants").findOne({ name });
+    const participant = await db.collection("participants").findOne(body);
 
     if (participant) return res.sendStatus(409);
 
-    await db.collection("participants").insertOne({ name, lastStatus: Date.now() });
+    await db.collection("participants").insertOne({ ...body, lastStatus: Date.now() });
     await db.collection("messages").insertOne({
-      from: name,
+      from: body.name,
       to: "Todos",
       text: "entra na sala...",
       type: "status",
@@ -63,15 +75,17 @@ app.get("/participants", async (req, res) => {
 
 app.post("/messages", async (req, res) => {
   try {
-    const { to, text, type } = req.body;
+    const body = req.body;
+
+    const validation = messsageSchema.validate(body);
+
     const user = req.header("User");
 
     const userExist = await db.collection("participants").findOne({ name: user });
-    //Falta ainda fazer a validação com joi
-    if (!to || !text || !type || !userExist || (type !== "message" && type !== "private_message"))
-      return res.sendStatus(422);
 
-    await db.collection("messages").insertOne({ from: user, to, text, type, time: dayjs().format("HH:mm:ss") });
+    if (validation.error || !userExist) return res.sendStatus(422);
+
+    await db.collection("messages").insertOne({ ...body, from: user, time: dayjs().format("HH:mm:ss") });
 
     res.sendStatus(201);
   } catch (error) {
@@ -84,7 +98,6 @@ app.get("/messages", async (req, res) => {
   const user = req.header("User");
   const limit = parseInt(req.query.limit);
 
-  //Falta ainda fazer a validação com joi
   // const userExist = await db.collection("participants").findOne({ name: user });
   // if(!userExist) return res.sendStatus(422);
 
