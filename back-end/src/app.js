@@ -23,9 +23,6 @@ app.use([json(), cors()]);
 const mongoClient = new MongoClient(process.env.MONGO_URI);
 let db;
 
-// const participant = { name: "João", lastStatus: 12313123 };
-// const message = { from: "João", to: "Todos", text: "oi galera", type: "message", time: "20:04:37" };
-
 mongoClient.connect().then(() => {
   db = mongoClient.db("chatUOL");
 });
@@ -96,7 +93,7 @@ app.post("/messages", async (req, res) => {
 
 app.get("/messages", async (req, res) => {
   const user = req.header("User");
-  const limit = parseInt(req.query.limit);
+  const limit = Number(req.query.limit);
 
   const userExist = await db.collection("participants").findOne({ name: user });
 
@@ -114,9 +111,9 @@ app.get("/messages", async (req, res) => {
       return boolean;
     });
 
-    if (!limit) return res.send(messages);
+    if (!limit || limit % 1 !== 0) return res.send(messages);
 
-    res.send(messages.slice(limit * -1));
+    res.send(messages.slice(parseInt(limit) * -1));
   } catch (error) {
     console.log(error);
     res.sendStatus(500);
