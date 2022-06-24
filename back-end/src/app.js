@@ -98,8 +98,9 @@ app.get("/messages", async (req, res) => {
   const user = req.header("User");
   const limit = parseInt(req.query.limit);
 
-  // const userExist = await db.collection("participants").findOne({ name: user });
-  // if(!userExist) return res.sendStatus(422);
+  const userExist = await db.collection("participants").findOne({ name: user });
+
+  if (!userExist) return res.sendStatus(422);
 
   try {
     let messages = await db.collection("messages").find().toArray();
@@ -140,6 +141,38 @@ app.post("/status", async (req, res) => {
     res.sendStatus(500);
   }
 });
+
+/* Automatic removal of inactive users */
+
+const TIME_10_SEC = 10 * 1000;
+const TIME_15_SEC = 15 * 1000;
+
+setInterval(async () => {
+  try {
+    let inactiveUsers = await db
+      .collection("participants")
+      .find({ lastStatus: { $lt: Date.now() - TIME_10_SEC } })
+      .toArray();
+
+    if (inactiveUsers.length === 0) return;
+
+    inactiveUsers = inactiveUsers.map((user) => user.name);
+
+    await db.collection("participants").deleteMany({ name: { $in: inactiveUsers } });
+
+    const messageLeavesTheRoom = { to: "Todos", text: "sai da sala...", type: "status" };
+
+    inactiveUsers = inactiveUsers.map((name) => ({
+      ...messageLeavesTheRoom,
+      from: name,
+      time: dayjs().format("HH:mm:ss"),
+    }));
+
+    await db.collection("messages").insertMany(inactiveUsers);
+  } catch (error) {
+    console.log(error);
+  }
+}, TIME_15_SEC);
 
 app.listen(5000, () => {
   console.log("O Servidor está rodando em http://localhost:5000");
