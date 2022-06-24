@@ -121,18 +121,57 @@ app.get("/messages", async (req, res) => {
 });
 
 app.delete("/messages/:id", async (req, res) => {
-  const user = req.header("User");
-  const id = req.params.id;
+  try {
+    const user = req.header("User");
+    const id = req.params.id;
 
-  const message = await db.collection("messages").findOne({ _id: new ObjectId(id) });
+    const message = await db.collection("messages").findOne({ _id: new ObjectId(id) });
 
-  if (!message) return res.sendStatus(404);
+    if (!message) return res.sendStatus(404);
 
-  if (message.from !== user) return res.sendStatus(401);
+    const userExist = await db.collection("participants").findOne({ name: user });
 
-  await db.collection("messages").deleteOne({ _id: message._id });
+    if (!userExist) return res.sendStatus(422);
 
-  res.sendStatus(200);
+    if (message.from !== user) return res.sendStatus(401);
+
+    await db.collection("messages").deleteOne({ _id: message._id });
+
+    res.sendStatus(200);
+  } catch (error) {
+    console.log(error);
+    res.sendStatus(500);
+  }
+});
+
+app.put("/messages/:id", async (req, res) => {
+  try {
+    const body = req.body;
+    const id = req.params.id;
+
+    const validation = messsageSchema.validate(body);
+
+    const user = req.header("User");
+
+    const userExist = await db.collection("participants").findOne({ name: user });
+
+    if (validation.error || !userExist) return res.sendStatus(422);
+
+    const message = await db.collection("messages").findOne({ _id: new ObjectId(id) });
+
+    if (!message) return res.sendStatus(404);
+
+    if (message.from !== user) return res.sendStatus(401);
+
+    await db
+      .collection("messages")
+      .updateOne({ _id: message._id }, { $set: { ...body, from: user, time: dayjs().format("HH:mm:ss") } });
+
+    res.sendStatus(200);
+  } catch (error) {
+    console.log(error);
+    res.sendStatus(500);
+  }
 });
 
 /* Status route */
