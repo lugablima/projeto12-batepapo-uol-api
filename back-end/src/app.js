@@ -68,7 +68,7 @@ app.post("/messages", async (req, res) => {
 
     const userExist = await db.collection("participants").findOne({ name: user });
     //Falta ainda fazer a validação com joi
-    if (!to || !text || !type || !userExist || type !== "message" || type !== "private_message")
+    if (!to || !text || !type || !userExist || (type !== "message" && type !== "private_message"))
       return res.sendStatus(422);
 
     await db.collection("messages").insertOne({ from: user, to, text, type, time: dayjs().format("HH:mm:ss") });
@@ -84,11 +84,12 @@ app.get("/messages", async (req, res) => {
   const user = req.header("User");
   const limit = parseInt(req.query.limit);
 
+  //Falta ainda fazer a validação com joi
   // const userExist = await db.collection("participants").findOne({ name: user });
   // if(!userExist) return res.sendStatus(422);
 
   try {
-    let messages = await db.collection("/messages").find().toArray();
+    let messages = await db.collection("messages").find().toArray();
 
     messages = messages.filter((msg) => {
       let boolean;
@@ -102,6 +103,25 @@ app.get("/messages", async (req, res) => {
     if (!limit) return res.send(messages);
 
     res.send(messages.slice(limit * -1));
+  } catch (error) {
+    console.log(error);
+    res.sendStatus(500);
+  }
+});
+
+/* Status route */
+
+app.post("/status", async (req, res) => {
+  try {
+    const user = req.header("User");
+
+    const userExist = await db.collection("participants").findOne({ name: user });
+
+    if (!userExist) return res.sendStatus(404);
+
+    await db.collection("participants").updateOne({ name: user }, { $set: { lastStatus: Date.now() } });
+
+    res.sendStatus(200);
   } catch (error) {
     console.log(error);
     res.sendStatus(500);
