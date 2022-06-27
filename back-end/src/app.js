@@ -5,6 +5,7 @@ dotenv.config();
 import { MongoClient, ObjectId } from "mongodb";
 import dayjs from "dayjs";
 import joi from "joi";
+import { stripHtml } from "string-strip-html";
 
 const participantSchema = joi.object({
   name: joi.string().trim().required(),
@@ -36,14 +37,16 @@ app.post("/participants", async (req, res) => {
 
   if (validation.error) return res.sendStatus(422);
 
+  const name = stripHtml(body.name).result.trim();
+
   try {
-    const participant = await db.collection("participants").findOne(body);
+    const participant = await db.collection("participants").findOne({ name });
 
     if (participant) return res.sendStatus(409);
 
-    await db.collection("participants").insertOne({ ...body, lastStatus: Date.now() });
+    await db.collection("participants").insertOne({ name, lastStatus: Date.now() });
     await db.collection("messages").insertOne({
-      from: body.name,
+      from: name,
       to: "Todos",
       text: "entra na sala...",
       type: "status",
@@ -76,11 +79,27 @@ app.post("/messages", async (req, res) => {
 
     const validation = messsageSchema.validate(body);
 
-    const user = req.header("User");
+    let user = req.header("User");
 
-    const userExist = await db.collection("participants").findOne({ name: user });
+    user = stripHtml(user).result.trim();
 
-    if (validation.error || !userExist) return res.sendStatus(422);
+    let participants = await db.collection("participants").find().toArray();
+
+    participants = participants.map((participant) => participant.name);
+
+    const userSchema = joi
+      .string()
+      .trim()
+      .valid(...participants)
+      .required();
+
+    const validationUser = userSchema.validate(user);
+
+    if (validation.error || validationUser.error) return res.sendStatus(422);
+
+    for (let prop in body) {
+      body[prop] = stripHtml(body[prop]).result.trim();
+    }
 
     await db.collection("messages").insertOne({ ...body, from: user, time: dayjs().format("HH:mm:ss") });
 
@@ -92,14 +111,26 @@ app.post("/messages", async (req, res) => {
 });
 
 app.get("/messages", async (req, res) => {
-  const user = req.header("User");
-  const limit = Number(req.query.limit);
-
-  const userExist = await db.collection("participants").findOne({ name: user });
-
-  if (!userExist) return res.sendStatus(422);
-
   try {
+    let user = req.header("User");
+    const limit = Number(req.query.limit);
+
+    user = stripHtml(user).result.trim();
+
+    let participants = await db.collection("participants").find().toArray();
+
+    participants = participants.map((participant) => participant.name);
+
+    const userSchema = joi
+      .string()
+      .trim()
+      .valid(...participants)
+      .required();
+
+    const validationUser = userSchema.validate(user);
+
+    if (validationUser.error) return res.sendStatus(422);
+
     let messages = await db.collection("messages").find().toArray();
 
     messages = messages.filter((msg) => {
@@ -122,7 +153,8 @@ app.get("/messages", async (req, res) => {
 
 app.delete("/messages/:id", async (req, res) => {
   try {
-    const user = req.header("User");
+    let user = req.header("User");
+    user = stripHtml(user).result.trim();
     const id = req.params.id;
 
     const message = await db.collection("messages").findOne({ _id: new ObjectId(id) });
@@ -147,21 +179,35 @@ app.delete("/messages/:id", async (req, res) => {
 app.put("/messages/:id", async (req, res) => {
   try {
     const body = req.body;
+    let user = req.header("User");
+    user = stripHtml(user).result.trim();
     const id = req.params.id;
 
-    const validation = messsageSchema.validate(body);
+    const validationBody = messsageSchema.validate(body);
 
-    const user = req.header("User");
+    let participants = await db.collection("participants").find().toArray();
 
-    const userExist = await db.collection("participants").findOne({ name: user });
+    participants = participants.map((participant) => participant.name);
 
-    if (validation.error || !userExist) return res.sendStatus(422);
+    const userSchema = joi
+      .string()
+      .trim()
+      .valid(...participants)
+      .required();
+
+    const validationUser = userSchema.validate(user);
+
+    if (validationBody.error || validationUser.error) return res.sendStatus(422);
 
     const message = await db.collection("messages").findOne({ _id: new ObjectId(id) });
 
     if (!message) return res.sendStatus(404);
 
     if (message.from !== user) return res.sendStatus(401);
+
+    for (let prop in body) {
+      body[prop] = stripHtml(body[prop]).result.trim();
+    }
 
     await db
       .collection("messages")
@@ -178,7 +224,9 @@ app.put("/messages/:id", async (req, res) => {
 
 app.post("/status", async (req, res) => {
   try {
-    const user = req.header("User");
+    let user = req.header("User");
+
+    user = stripHtml(user).result.trim();
 
     const userExist = await db.collection("participants").findOne({ name: user });
 
